@@ -13,6 +13,9 @@ import Crypto.Hash.SHA
 from pbkdf2 import PBKDF2
 
 
+DEFAULT_DATA_LABEL = "userdata"
+
+
 ## from system/vold/cryptfs.h
 # /* This structure starts 16,384 bytes before the end of a hardware
 #  * partition that is encrypted.
@@ -179,7 +182,7 @@ def get_decrypted_key(crypt_ftr, encrypted_key, salt, prompt=None):
         decrypted_key = decrypt_key(encrypted_key, salt, password)
     return decrypted_key
 
-def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
+def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label=DEFAULT_DATA_LABEL):
     cmd = ["sudo", "cryptsetup",
            "-h", "plain",
            "-c", crypt_ftr.crypto_type_name,
@@ -196,7 +199,7 @@ def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
     if rc != 0:
         raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
 
-def mount_android_image(disk_image, mnt_dir, label="userdata"):
+def mount_android_image(disk_image, mnt_dir, label=DEFAULT_DATA_LABEL):
     (crypt_ftr, encrypted_key, salt) = get_crypt_ftr_and_key(disk_image)
     decrypted_key = get_decrypted_key(crypt_ftr, encrypted_key, salt)
 
@@ -221,7 +224,7 @@ def main(args):
         mount_android_image(disk_image, mnt_dir)
     elif cmd == 'umount':
         (mnt_dir,) = args
-        cryptsetup_umount("userdata", mnt_dir)
+        cryptsetup_umount(DEFAULT_DATA_LABEL, mnt_dir)
     elif cmd == 'changepw':
         (disk_image,) = args
         changepw_android_image(disk_image)
