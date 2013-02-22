@@ -3,7 +3,6 @@
 from collections import namedtuple
 import getpass
 import os
-from StringIO import StringIO
 import struct
 import subprocess
 import sys
