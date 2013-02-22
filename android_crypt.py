@@ -168,6 +168,17 @@ def decrypt_key(encrypted_key, salt, password):
     decrypted_key = cipher.decrypt(encrypted_key)
     return decrypted_key
 
+def get_decrypted_key(crypt_ftr, encrypted_key, salt, prompt=None):
+    if crypt_ftr.flags & CRYPT_MNT_KEY_UNENCRYPTED:
+        decrypted_key = encrypted_key
+    else:
+        if prompt:
+            password = getpass.getpass(prompt)
+        else:
+            password = getpass.getpass()
+        decrypted_key = decrypt_key(encrypted_key, salt, password)
+    return decrypted_key
+
 def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
     cmd = ["sudo", "cryptsetup",
            "-h", "plain",
@@ -187,11 +198,7 @@ def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
 
 def mount_android_image(disk_image, mnt_dir, label="userdata"):
     (crypt_ftr, encrypted_key, salt) = get_crypt_ftr_and_key(disk_image)
-    if crypt_ftr.flags & CRYPT_MNT_KEY_UNENCRYPTED:
-        decrypted_key = encrypted_key
-    else:
-        password = getpass.getpass()
-        decrypted_key = decrypt_key(encrypted_key, salt, password)
+    decrypted_key = get_decrypted_key(crypt_ftr, encrypted_key, salt)
 
     return cryptsetup_mount(disk_image, mnt_dir,
                             decrypted_key, crypt_ftr,
