@@ -182,7 +182,7 @@ def get_decrypted_key(crypt_ftr, encrypted_key, salt, prompt=None):
         decrypted_key = decrypt_key(encrypted_key, salt, password)
     return decrypted_key
 
-def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label=DEFAULT_DATA_LABEL):
+def cryptsetup_create(disk_image, key, crypt_ftr, label=DEFAULT_DATA_LABEL):
     cmd = ["sudo", "cryptsetup",
            "-h", "plain",
            "-c", crypt_ftr.crypto_type_name,
@@ -194,24 +194,25 @@ def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label=DEFAULT_DATA_LAB
     if p.returncode != 0:
         raise CalledProcessError(returncode=p.returncode,
                                  cmd=' '.join(cmd))
-    cmd = ["sudo", "mount", "/dev/mapper/{}".format(label), mnt_dir]
+
+def mount_dm_dev(mnt_dir, dm_dev=DEFAULT_DATA_LABEL):
+    cmd = ["sudo", "mount", "/dev/mapper/{}".format(dm_dev), mnt_dir]
     rc = subprocess.call(cmd)
     if rc != 0:
         raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
 
-def mount_android_image(disk_image, mnt_dir, label=DEFAULT_DATA_LABEL):
+def decrypt_android_image(disk_image, label=DEFAULT_DATA_LABEL):
     (crypt_ftr, encrypted_key, salt) = get_crypt_ftr_and_key(disk_image)
     decrypted_key = get_decrypted_key(crypt_ftr, encrypted_key, salt)
+    cryptsetup_create(disk_image, decrypted_key, crypt_ftr, label=label)
 
-    return cryptsetup_mount(disk_image, mnt_dir,
-                            decrypted_key, crypt_ftr,
-                            label=label)
-
-def cryptsetup_umount(label, mnt_dir):
+def umount_dm_dev(mnt_dir):
     cmd = ["sudo", "umount", mnt_dir]
     rc = subprocess.call(cmd)
     if rc != 0:
         raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
+
+def cryptsetup_remove(label=DEFAULT_DATA_LABEL):
     cmd = ["sudo", "cryptsetup", "remove", label]
     rc = subprocess.call(cmd)
     if rc != 0:
@@ -219,12 +220,19 @@ def cryptsetup_umount(label, mnt_dir):
 
 def main(args):
     cmd = args.pop(0)
-    if cmd == 'mount':
+    if cmd == 'decrypt':
+        (disk_image,) = args
+        decrypt_android_image(disk_image)
+    elif cmd == 'mount':
         disk_image, mnt_dir = args
-        mount_android_image(disk_image, mnt_dir)
+        decrypt_android_image(disk_image)
+        mount_dm_dev(mnt_dir)
     elif cmd == 'umount':
         (mnt_dir,) = args
-        cryptsetup_umount(DEFAULT_DATA_LABEL, mnt_dir)
+        umount_dm_dev(mnt_dir)
+        cryptsetup_remove()
+    elif cmd == 'decrypt_cleanup':
+        cryptsetup_remove()
     elif cmd == 'changepw':
         (disk_image,) = args
         changepw_android_image(disk_image)
