@@ -94,22 +94,43 @@ class CryptMntFtr(namedtuple('CryptMntFtr', (
         return cls._struct.size
 
 
+class Error(Exception):
+    """Base class for exceptions in this module."""
+    pass
+
+
+class BadCryptFtrError(ValueError, Error):
+    """Exception raised for malformed or illegal CryptMntFtr values."""
+
+    def __init__(self, filename, footer, msg):
+        super(BadCryptFtrError, self).__init__(filename, footer, msg)
+        self.filename = filename
+        self.footer = footer
+        self.msg = msg
+
+
+class CalledProcessError(subprocess.CalledProcessError, Error):
+    """Exception raised when a subprocess returns a non-zero exit code."""
+    pass
+
+
 def get_crypt_ftr_and_key(disk_image):
     with open(disk_image, 'rb') as fh:
         fh.seek(-CRYPT_FOOTER_OFFSET, os.SEEK_END)
         footer = fh.read(CryptMntFtr.struct_size())
         if len(footer) < CryptMntFtr.struct_size():
-            print("Cannot read disk image footer")
-            return None
+            raise BadCryptFtrError(disk_image, None,
+                                   "Cannot read disk image footer")
         crypt_ftr = CryptMntFtr(footer)
 
         if crypt_ftr.magic != CRYPT_MNT_MAGIC:
-            print("Bad magic in disk image footer")
-            return None
+            raise BadCryptFtrError(
+                    disk_image, crypt_ftr, "Bad magic in disk image footer")
         if crypt_ftr.major_version != 1:
-            print("Cannot understand major version {} "
-                  "in disk image footer".format(crypt_ftr.major_version))
-            return None
+            raise BadCryptFtrError(disk_image, crypt_ftr,
+                                   "Cannot understand major version {} in "
+                                   "disk image footer".format(
+                                       crypt_ftr.major_version))
         if crypt_ftr.minor_version != 0:
             print("Warning: crypto footer minor version {}, "
                   "expected 0, continuing...".format(crypt_ftr.minor_version))
@@ -119,19 +140,19 @@ def get_crypt_ftr_and_key(disk_image):
             fh.seek(crypt_ftr.ftr_size - CryptMntFtr.struct_size(), os.SEEK_CUR)
 
         if crypt_ftr.keysize != KEY_LEN_BYTES:
-            print("Keysize of {} bits not supported".format(
-                    crypt_ftr.keysize*8))
-            return None
+            raise BadCryptFtrError(disk_image, crypt_ftr,
+                                   "Keysize of {} bits not supported".format(
+                                       crypt_ftr.keysize*8))
         key = fh.read(crypt_ftr.keysize)
         if len(key) != crypt_ftr.keysize:
-            print("Cannot read key from disk image footer")
-            return None
+            raise BadCryptFtrError(disk_image, crypt_ftr,
+                                   "Cannot read key from disk image footer")
 
         fh.seek(KEY_TO_SALT_PADDING, os.SEEK_CUR)
         salt = fh.read(SALT_LEN)
         if len(salt) != SALT_LEN:
-            print("Cannot read salt from disk image footer")
-            return None
+            raise BadCryptFtrError(disk_image, crypt_ftr,
+                                   "Cannot read salt from disk image footer")
 
     return (crypt_ftr, key, salt)
 
@@ -157,14 +178,12 @@ def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
     p = subprocess.Popen(cmd, stdin=subprocess.PIPE)
     p.communicate(key)
     if p.returncode != 0:
-        print("cryptsetup returned error code: {}".format(p.returncode))
-        return False
+        raise CalledProcessError(returncode=p.returncode,
+                                 cmd=' '.join(cmd))
     cmd = ["sudo", "mount", "/dev/mapper/{}".format(label), mnt_dir]
     rc = subprocess.call(cmd)
     if rc != 0:
-        print("mount returned an error code: {}".format(rc))
-        return False
-    return True
+        raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
 
 def mount_android_image(disk_image, mnt_dir, label="userdata"):
     (crypt_ftr, encrypted_key, salt) = get_crypt_ftr_and_key(disk_image)
@@ -182,14 +201,11 @@ def cryptsetup_umount(label, mnt_dir):
     cmd = ["sudo", "umount", mnt_dir]
     rc = subprocess.call(cmd)
     if rc != 0:
-        print("umount returned an error code: {}".format(rc))
-        return False
+        raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
     cmd = ["sudo", "cryptsetup", "remove", label]
     rc = subprocess.call(cmd)
     if rc != 0:
-        print("cryptsetup returned an error code: {}".format(rc))
-        return False
-    return True
+        raise CalledProcessError(returncode=rc, cmd=' '.join(cmd))
 
 def main(args):
     cmd = args.pop(0)
