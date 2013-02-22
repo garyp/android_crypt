@@ -85,7 +85,9 @@ class CryptMntFtr(namedtuple('CryptMntFtr', (
 
     def __new__(cls, bytestring):
         footer_tuple = cls._struct.unpack(bytestring)
-        return super(CryptMntFtr, cls).__new__(cls, *footer_tuple)
+        named_footer = super(CryptMntFtr, cls).__new__(cls, *footer_tuple)
+        return named_footer._replace(
+                crypto_type_name=named_footer.crypto_type_name.rstrip("\0"))
 
     @classmethod
     def struct_size(cls):
@@ -148,7 +150,7 @@ def decrypt_key(encrypted_key, salt, password):
 def cryptsetup_mount(disk_image, mnt_dir, key, crypt_ftr, label="userdata"):
     cmd = ["sudo", "cryptsetup",
            "-h", "plain",
-           "-c", crypt_ftr.crypto_type_name.rstrip("\0"),
+           "-c", crypt_ftr.crypto_type_name,
            "-d-", "-s", str(KEY_LEN_BYTES*8),
            "create", label, disk_image,
            ]
