@@ -6,6 +6,7 @@ import os
 import struct
 import subprocess
 import sys
+from warnings import warn
 
 import Crypto.Cipher.AES
 import Crypto.Hash.HMAC
@@ -135,8 +136,8 @@ def get_crypt_ftr_and_key(disk_image):
                                    "disk image footer".format(
                                        crypt_ftr.major_version))
         if crypt_ftr.minor_version != 0:
-            print("Warning: crypto footer minor version {}, "
-                  "expected 0, continuing...".format(crypt_ftr.minor_version))
+            warn("crypto footer minor version {}, expected 0".format(
+                crypt_ftr.minor_version), UserWarning)
 
         if crypt_ftr.ftr_size > CryptMntFtr.struct_size():
             # skip to the end of the footer so we can read the key
